@@ -1,0 +1,29 @@
+name: Pachinko
+options:
+  bundleIdPrefix: com.pachinko
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+
+settings:
+  SWIFT_VERSION: "5.9"
+
+targets:
+  Pachinko:
+    type: application
+    platform: [iOS, macOS]
+    sources:
+      - Sources/Pachinko
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.pachinko.app
+      INFOPLIST_FILE: Info.plist
+
+  PachinkoTests:
+    type: bundle.unit-test
+    platform: [iOS, macOS]
+    sources:
+      - Tests/PachinkoTests
+    dependencies:
+      - target: Pachinko
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.pachinko.tests

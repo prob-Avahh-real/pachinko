@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>パチンコ — 一休 Classic Pachinko</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --gold: #ffd700;
+    --neon-pink: #ff2d95;
+    --neon-blue: #00e5ff;
+    --pocket-gold: #ffaa00;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body {
+    width:100%; height:100%; overflow:hidden;
+    background:var(--bg);
+    font-family:'Helvetica Neue','Hiragino Sans',sans-serif;
+    touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none; user-select:none;
+  }
+  #game-container {
+    position:relative; width:100%; height:100%;
+    max-width:500px; margin:0 auto;
+    display:flex; flex-direction:column;
+  }
+  canvas {
+    display:block; width:100%; flex:1;
+  }
+  #hud {
+    position:absolute; top:0; left:0; right:0;
+    padding:8px 12px;
+    display:flex; justify-content:space-between;
+    align-items:flex-start; pointer-events:none; z-index:10;
+  }
+  .hud-panel {
+    background:rgba(0,0,0,0.7);
+    border:1px solid rgba(255,215,0,0.3);
+    border-radius:8px; padding:4px 10px;
+    color:#ffd700; font-size:12px; text-align:center;
+    backdrop-filter:blur(4px);
+  }
+  .hud-panel .label { font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px; }
+  .hud-panel .value { font-size:18px; font-weight:bold; text-shadow:0 0 8px currentColor; }
+  #ball-counter {
+    position:absolute; bottom:80px; left:12px;
+    display:flex; gap:4px; pointer-events:none; z-index:10;
+    flex-wrap:wrap; max-width:80%;
+  }
+  .ball-dot {
+    width:12px; height:12px; border-radius:50%;
+    background:radial-gradient(circle at 35% 35%, #fff, #ffd700, #b8860b);
+    box-shadow:0 0 6px #ffd700; transition:all 0.3s;
+  }
+  .ball-dot.used { opacity:0.25; box-shadow:none; }
+  #fever-indicator {
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%); pointer-events:none; z-index:20;
+    opacity:0; transition:opacity 0.2s;
+  }
+  #fever-indicator.active { opacity:1; }
+  #fever-text {
+    font-size:48px; font-weight:900; color:#ff2d95;
+    text-shadow:0 0 20px #ff2d95,0 0 40px #ff2d95,0 0 80px #ff0080,0 0 120px #ff0080;
+    animation:feverPulse 0.3s ease-in-out infinite alternate; text-align:center;
+  }
+  @keyframes feverPulse {
+    from { transform:scale(1); text-shadow:0 0 20px #ff2d95,0 0 40px #ff2d95,0 0 80px #ff0080; }
+    to   { transform:scale(1.1); text-shadow:0 0 30px #ff2d95,0 0 60px #ff2d95,0 0 100px #ff0080,0 0 140px #ff0080; }
+  }
+  #message-toast {
+    position:absolute; bottom:30%; left:50%;
+    transform:translate(-50%,0); pointer-events:none; z-index:15;
+    color:#ffd700; font-size:20px; font-weight:bold;
+    text-shadow:0 0 12px #ffd700; opacity:0;
+    transition:all 0.3s; text-align:center;
+  }
+  #message-toast.show { opacity:1; animation:toastUp 1.2s ease-out forwards; }
+  @keyframes toastUp {
+    0%   { opacity:1; transform:translate(-50%,0) scale(0.8); }
+    30%  { opacity:1; transform:translate(-50%,-10px) scale(1.1); }
+    100% { opacity:0; transform:translate(-50%,-40px) scale(1); }
+  }
+  #touch-hint {
+    position:absolute; bottom:30px; left:50%;
+    transform:translateX(-50%); color:rgba(255,255,255,0.5);
+    font-size:11px; pointer-events:none; z-index:10;
+    animation:hintPulse 2s ease-in-out infinite;
+  }
+  @keyframes hintPulse {
+    0%,100% { opacity:0.3; } 50% { opacity:0.8; }
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div class="hud-panel">
+      <div class="label">Score</div>
+      <div class="value" id="score-display" style="color:#ffd700">0</div>
+    </div>
+    <div class="hud-panel">
+      <div class="label">Mult</div>
+      <div class="value" id="multiplier-display" style="color:#ff2d95">×1</div>
+    </div>
+    <div class="hud-panel">
+      <div class="label">Fever</div>
+      <div class="value" id="fever-count-display" style="color:#00e5ff">0/5</div>
+    </div>
+  </div>
+  <div id="ball-counter"></div>
+  <div id="fever-indicator"><div id="fever-text">FEVER!!</div></div>
+  <div id="message-toast"></div>
+  <div id="touch-hint">Tap to launch ↟</div>
+</div>
+
+<script>
+// ============================================================
+// パチンコ Pachinko — 一休 Classic Edition
+// ============================================================
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+const scoreDisplay = document.getElementById('score-display');
+const multiplierDisplay = document.getElementById('multiplier-display');
+const feverCountDisplay = document.getElementById('fever-count-display');
+const feverIndicator = document.getElementById('fever-indicator');
+const messageToast = document.getElementById('message-toast');
+const touchHint = document.getElementById('touch-hint');
+const ballCounterEl = document.getElementById('ball-counter');
+
+// ============================================================
+// CONFIG
+// ============================================================
+const C = {
+  pinCols: 9, pinRows: 16, pinRadius: 5, ballRadius: 7,
+  gravity: 900, pinBounce: 0.55, friction: 0.998, maxSpeed: 800,
+  initialBalls: 15, maxBalls: 100,
+  powerOscSpeed: 2.8, feverThreshold: 5, feverDuration: 8000,
+  pocketPositions: [0.02, 0.14, 0.27, 0.40, 0.50, 0.60, 0.73, 0.86, 0.98],
+  pocketLabels: ['OUT','×1','×3','×5','FEVER','×5','×3','×1','OUT'],
+  pocketValues: [0,100,300,500,0,500,300,100,0],
+  pocketColors: ['#330000','#ff6600','#ff9900','#ffcc00','#ff2d95','#ffcc00','#ff9900','#ff6600','#330000'],
+};
+
+// ============================================================
+// AUDIO ENGINE — Synthesized 一休-style SFX
+// ============================================================
+let audioCtx = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function playTone(freq, dur, type='sine', vol=0.12, detune=0) {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  osc.detune.value = detune;
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  osc.connect(g);
+  g.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + dur);
+}
+
+// Pin hit — sharp metallic "ting" (一休's 叮!)
+function sfxPinHit() {
+  if (!audioCtx) return;
+  const f = 1400 + Math.random() * 500;
+  playTone(f, 0.05, 'triangle', 0.10);
+  playTone(f * 2.76, 0.03, 'sine', 0.05);
+}
+
+// Launch "whoosh"
+function sfxLaunch(pw) {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(180, t);
+  osc.frequency.linearRampToValueAtTime(500 + pw * 500, t + 0.15);
+  g.gain.setValueAtTime(0.06, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  osc.connect(g);
+  g.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.2);
+}
+
+// Score jingle — pentatonic arpeggio
+function sfxScoreJingle(val) {
+  if (!audioCtx) return;
+  const scale = [523, 587, 659, 784, 880, 1047, 1175];
+  const notes = val >= 500 ? 5 : 3;
+  for (let i = 0; i < notes; i++) {
+    setTimeout(() => playTone(scale[i], 0.12, 'sine', 0.11), i * 65);
+  }
+}
+
+// Drain — descending sad tone
+function sfxDrain() {
+  if (!audioCtx) return;
+  [420, 340, 260].forEach((f, i) => {
+    setTimeout(() => playTone(f, 0.14, 'triangle', 0.07), i * 90);
+  });
+}
+
+// Fever fanfare with 一休 ding rhythm
+function sfxFeverStart() {
+  if (!audioCtx) return;
+  // Rising fanfare
+  [523, 659, 784, 1047].forEach((f, i) => {
+    setTimeout(() => playTone(f, 0.12, 'square', 0.08), i * 80);
+  });
+  // Ding-ding-ding rhythm (一休 style)
+  setTimeout(() => {
+    for (let i = 0; i < 8; i++) {
+      setTimeout(() => {
+        playTone(1568, 0.05, 'triangle', 0.13);
+        playTone(1568 * 2.76, 0.03, 'sine', 0.05);
+      }, i * 100);
+    }
+  }, 400);
+}
+
+// Ambient Japanese bell
+function sfxAmbientBell() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1319, t);
+  osc.frequency.exponentialRampToValueAtTime(659, t + 1.5);
+  g.gain.setValueAtTime(0.03, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 2.0);
+  osc.connect(g);
+  g.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 2.0);
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+const S = {
+  score: 0, multiplier: 1, ballsRemaining: C.initialBalls,
+  feverCount: 0, isFever: false, feverTimer: 0,
+  balls: [], particles: [],
+  powerLevel: 0.5, powerDir: 1,
+  screenShake: 0, comboCount: 0, lastPocketTime: 0,
+  _gameOver: false,
+};
+
+// ============================================================
+// BOARD
+// ============================================================
+let board = {};
+
+function recalcBoard() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width, h = rect.height;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+
+  const gameW = w * 0.88;
+  const padX = 16;
+  const padTop = 50;
+  const padBottom = 130;
+
+  board.left = padX;
+  board.top = padTop;
+  board.width = gameW - padX;
+  board.height = h - padTop - padBottom;
+  board.pinStartY = padTop + 45;
+  board.pinEndY = padTop + board.height - 85;
+  board.pocketY = board.pinEndY + 35;
+
+  // Generate pins
+  board.pins = [];
+  const psX = board.width / (C.pinCols + 1);
+  const psY = (board.pinEndY - board.pinStartY) / C.pinRows;
+
+  for (let row = 0; row < C.pinRows; row++) {
+    const offX = (row % 2) * psX * 0.5;
+    for (let col = 0; col < C.pinCols; col++) {
+      const x = board.left + psX + col * psX + offX;
+      const y = board.pinStartY + row * psY;
+      board.pins.push({ x, y, r: C.pinRadius });
+    }
+  }
+
+  // Generate pockets
+  board.pockets = [];
+  const pkCount = C.pocketPositions.length;
+  const pkW = board.width / (pkCount + 1);
+  const pkH = 38;
+
+  for (let i = 0; i < pkCount; i++) {
+    const cx = board.left + (i + 1) * pkW;
+    const halfW = pkW * 0.88 * 0.5;
+    board.pockets.push({
+      x: cx - halfW, y: board.pocketY, w: halfW * 2, h: pkH,
+      label: C.pocketLabels[i], value: C.pocketValues[i],
+      color: C.pocketColors[i], isFever: i === Math.floor(pkCount / 2),
+    });
+  }
+}
+
+// ============================================================
+// PARTICLES
+// ============================================================
+function spawnParticles(x, y, n, color) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 50 + Math.random() * 220;
+    S.particles.push({
+      x, y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd - 60,
+      life: 0.35 + Math.random() * 0.55, maxLife: 0.35 + Math.random() * 0.55,
+      color, size: 1.5 + Math.random() * 3.5,
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = S.particles.length - 1; i >= 0; i--) {
+    const p = S.particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { S.particles.splice(i, 1); continue; }
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 280 * dt;
+    p.size *= 0.995;
+  }
+}
+
+// ============================================================
+// BALL PHYSICS
+// ============================================================
+function launchBall(pw) {
+  if (S.ballsRemaining <= 0) return;
+  initAudio();
+
+  const cx = board.left + board.width / 2;
+  const lx = cx + (Math.random() - 0.5) * 70 * pw;
+  const ly = board.pinStartY - 35;
+
+  S.balls.push({
+    x: lx, y: ly,
+    vx: (Math.random() - 0.5) * 100,
+    vy: -280 - pw * 650,
+    r: C.ballRadius, active: true, hitCount: 0,
+  });
+
+  S.ballsRemaining--;
+  sfxLaunch(pw);
+  updateBallCounter();
+}
+
+function updateBalls(dt) {
+  const br = board.left + board.width;
+
+  for (let i = S.balls.length - 1; i >= 0; i--) {
+    const b = S.balls[i];
+    if (!b.active) continue;
+
+    b.vy += C.gravity * dt;
+    b.vx *= C.friction;
+    b.vy *= C.friction;
+
+    const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+    if (spd > C.maxSpeed) {
+      const s = C.maxSpeed / spd;
+      b.vx *= s; b.vy *= s;
+    }
+
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+
+    // Walls
+    if (b.x - b.r < board.left) { b.x = board.left + b.r; b.vx *= -0.6; sfxPinHit(); }
+    if (b.x + b.r > br) { b.x = br - b.r; b.vx *= -0.6; sfxPinHit(); }
+
+    // Pins
+    for (const pin of board.pins) {
+      const dx = b.x - pin.x, dy = b.y - pin.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const md = b.r + pin.r;
+      if (dist < md && dist > 0) {
+        const overlap = md - dist;
+        const nx = dx / dist, ny = dy / dist;
+        b.x += nx * overlap;
+        b.y += ny * overlap;
+        const vn = b.vx * nx + b.vy * ny;
+        if (vn < 0) {
+          b.vx -= (1 + C.pinBounce) * vn * nx;
+          b.vy -= (1 + C.pinBounce) * vn * ny;
+        }
+        b.vx += (Math.random() - 0.5) * 35;
+        b.vy += (Math.random() - 0.5) * 35;
+        b.hitCount++;
+        if (b.hitCount % 3 === 0) {
+          sfxPinHit();
+          spawnParticles(b.x, b.y, 2, '#ffd700');
+        }
+      }
+    }
+
+    // Pocket detection
+    if (b.y + b.r >= board.pocketY && b.y < board.pocketY + 55) {
+      let scored = false;
+      for (const pk of board.pockets) {
+        if (b.x > pk.x && b.x < pk.x + pk.w && b.y + b.r >= pk.y) {
+          resolvePocket(b, pk);
+          S.balls.splice(i, 1);
+          scored = true;
+          break;
+        }
+      }
+      if (scored) continue;
+    }
+
+    // Fell off
+    if (b.y > board.pocketY + 80) {
+      resolveDrain(b);
+      S.balls.splice(i, 1);
+    }
+  }
+}
+
+function resolvePocket(b, pk) {
+  if (pk.isFever) {
+    S.feverCount++;
+    spawnParticles(b.x, b.y, 22, '#ff2d95');
+    sfxScoreJingle(500);
+    if (S.feverCount >= C.feverThreshold && !S.isFever) activateFever();
+    const msg = S.isFever ? '🔥 FEVER HIT! +1000' : `FEVER ${S.feverCount}/${C.feverThreshold}`;
+    showToast(msg);
+    if (S.isFever) {
+      S.score += 1000 * S.multiplier;
+      spawnParticles(b.x, b.y, 20, '#ffd700');
+    }
+  } else if (pk.value > 0) {
+    const now = Date.now();
+    S.comboCount = (now - S.lastPocketTime < 1500) ? S.comboCount + 1 : 0;
+    S.lastPocketTime = now;
+    const comboBonus = Math.min(S.comboCount, 5) * 0.2;
+    const pts = Math.floor(pk.value * S.multiplier * (1 + comboBonus));
+    S.score += pts;
+    spawnParticles(b.x, b.y, pk.value >= 500 ? 15 : 8, pk.color);
+    sfxScoreJingle(pts);
+    showToast(comboBonus > 0 ? `+${pts} COMBO×${S.comboCount + 1}!` : `+${pts}`);
+  } else {
+    resolveDrain(b);
+  }
+  if (S.feverCount < C.feverThreshold) {
+    feverCountDisplay.textContent = `${S.feverCount}/${C.feverThreshold}`;
+  }
+  updateScoreDisplay();
+  updateBallCounter();
+  checkGameEnd();
+}
+
+function resolveDrain(b) {
+  S.comboCount = 0;
+  sfxDrain();
+  spawnParticles(b.x, b.y + 10, 5, '#660000');
+  updateBallCounter();
+  checkGameEnd();
+}
+
+function checkGameEnd() {
+  if (S.ballsRemaining <= 0 && S.balls.length === 0 && !S.isFever) {
+    setTimeout(() => {
+      showToast('GAME OVER — Tap to restart');
+      touchHint.style.display = 'block';
+      S._gameOver = true;
+    }, 500);
+  }
+}
+
+function activateFever() {
+  S.isFever = true;
+  S.feverTimer = C.feverDuration;
+  S.multiplier = 5;
+  S.ballsRemaining += 10;
+  S.feverCount = 0;
+  feverIndicator.classList.add('active');
+  sfxFeverStart();
+  spawnParticles(board.left + board.width / 2, board.top + 100, 40, '#ff2d95');
+  S.screenShake = 0.6;
+  showToast('🔥🔥 FEVER MODE !! 🔥🔥');
+  updateScoreDisplay();
+  updateBallCounter();
+  feverCountDisplay.textContent = 'ACTIVE';
+  setTimeout(() => {
+    feverIndicator.classList.remove('active');
+    S.isFever = false;
+    S.multiplier = 1;
+    S.screenShake = 0;
+    S.feverCount = 0;
+    feverCountDisplay.textContent = `0/${C.feverThreshold}`;
+    updateScoreDisplay();
+    showToast('Fever ended');
+  }, C.feverDuration);
+}
+
+// ============================================================
+// UI
+// ============================================================
+function updateScoreDisplay() {
+  scoreDisplay.textContent = S.score.toLocaleString();
+  scoreDisplay.style.color = S.isFever ? '#ff2d95' : '#ffd700';
+  multiplierDisplay.textContent = `×${S.multiplier}`;
+}
+
+function updateBallCounter() {
+  ballCounterEl.innerHTML = '';
+  for (let i = 0; i < S.ballsRemaining; i++) {
+    const d = document.createElement('div');
+    d.className = 'ball-dot';
+    ballCounterEl.appendChild(d);
+  }
+  for (let i = 0; i < Math.min(S.balls.length, 15); i++) {
+    const d = document.createElement('div');
+    d.className = 'ball-dot';
+    d.style.boxShadow = '0 0 10px #00e5ff';
+    ballCounterEl.appendChild(d);
+  }
+}
+
+let toastTid;
+function showToast(msg) {
+  clearTimeout(toastTid);
+  messageToast.textContent = msg;
+  messageToast.classList.remove('show');
+  void messageToast.offsetWidth;
+  messageToast.classList.add('show');
+  toastTid = setTimeout(() => messageToast.classList.remove('show'), 1300);
+}
+
+// ============================================================
+// POWER METER
+// ============================================================
+function updatePowerMeter(dt) {
+  S.powerLevel += S.powerDir * C.powerOscSpeed * dt;
+  if (S.powerLevel >= 1.0) { S.powerLevel = 1.0; S.powerDir = -1; }
+  else if (S.powerLevel <= 0.1) { S.powerLevel = 0.1; S.powerDir = 1; }
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function render() {
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const w = canvas.width / dpr, h = canvas.height / dpr;
+
+  let sx = 0, sy = 0;
+  if (S.screenShake > 0) {
+    sx = (Math.random() - 0.5) * S.screenShake * 14;
+    sy = (Math.random() - 0.5) * S.screenShake * 14;
+    S.screenShake *= 0.91;
+    if (S.screenShake < 0.001) S.screenShake = 0;
+  }
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  // BG
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#08081a');
+  grad.addColorStop(0.5, '#0c0c22');
+  grad.addColorStop(1, '#040410');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,215,0,0.025)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < w; x += 28) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+  for (let y = 0; y < h; y += 28) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+  // Board frame
+  const fx = board.left - 8, fy = board.top - 8;
+  const fw = board.width + 16, fh = board.pocketY + 50 - board.top + 16;
+  ctx.shadowColor = S.isFever ? '#ff2d95' : '#ffd700';
+  ctx.shadowBlur = S.isFever ? 22 : 10;
+  ctx.strokeStyle = S.isFever ? '#ff2d95' : '#b8860b';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(fx, fy, fw, fh);
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(184,134,11,0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(fx + 5, fy + 5, fw - 10, fh - 10);
+
+  // Score lane
+  const lx = board.left + board.width + 6;
+  const lw = w - lx - 6;
+  if (lw >= 30) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(lx, board.top, lw, board.pocketY - board.top + 50);
+    for (let i = 0; i < board.pockets.length; i++) {
+      const pk = board.pockets[i];
+      const ly = pk.y + pk.h / 2;
+      ctx.font = 'bold 8px "Helvetica Neue", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = pk.color;
+      ctx.fillText(pk.label, lx + lw / 2, ly + 3);
+    }
+  }
+
+  // Pins
+  for (const p of board.pins) {
+    const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 2.8);
+    glow.addColorStop(0, 'rgba(255,215,0,0.35)');
+    glow.addColorStop(0.5, 'rgba(255,215,0,0.08)');
+    glow.addColorStop(1, 'rgba(255,215,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 3.2, 0, Math.PI * 2); ctx.fill();
+    const bg = ctx.createRadialGradient(p.x - 1, p.y - 1, 0, p.x, p.y, p.r);
+    bg.addColorStop(0, '#fff'); bg.addColorStop(0.5, '#ffd700'); bg.addColorStop(1, '#b8860b');
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Pockets
+  for (const pk of board.pockets) {
+    const ga = pk.isFever ? (S.isFever ? 0.7 : 0.35 + Math.sin(Date.now() * 0.005) * 0.2) : 0.2;
+    ctx.fillStyle = pk.color;
+    ctx.globalAlpha = ga;
+    ctx.fillRect(pk.x - 3, pk.y - 3, pk.w + 6, pk.h + 6);
+    ctx.globalAlpha = 1;
+    const grd = ctx.createLinearGradient(pk.x, pk.y, pk.x, pk.y + pk.h);
+    grd.addColorStop(0, 'rgba(0,0,0,0.85)');
+    grd.addColorStop(0.5, pk.color);
+    grd.addColorStop(1, 'rgba(0,0,0,0.92)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(pk.x, pk.y, pk.w, pk.h);
+    ctx.strokeStyle = pk.color;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(pk.x, pk.y, pk.w, pk.h);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px "Helvetica Neue", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(pk.label, pk.x + pk.w / 2, pk.y + pk.h / 2);
+  }
+
+  // Balls
+  for (const b of S.balls) {
+    if (!b.active) continue;
+    ctx.fillStyle = 'rgba(255,215,0,0.12)';
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createRadialGradient(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.1, b.x, b.y, b.r);
+    g.addColorStop(0, '#fff'); g.addColorStop(0.4, '#e8e8e8'); g.addColorStop(0.7, '#c0c0c0'); g.addColorStop(1, '#808080');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = S.isFever ? '#ff2d95' : '#ffd700';
+    ctx.lineWidth = 1;
+    ctx.shadowColor = S.isFever ? '#ff2d95' : '#ffd700';
+    ctx.shadowBlur = S.isFever ? 10 : 5;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 1, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // Particles
+  for (const p of S.particles) {
+    const a = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = a;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 5;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+
+  // Power meter
+  const mx = w - 36, my = h - 105, mw = 14, mh = 80;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(mx - 2, my - 2, mw + 4, mh + 4);
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(mx - 2, my - 2, mw + 4, mh + 4);
+  const fh = mh * S.powerLevel;
+  const fy = my + mh - fh;
+  let mc = S.powerLevel > 0.85 ? '#ff2d95' : S.powerLevel > 0.6 ? '#ff6600' : S.powerLevel > 0.3 ? '#ffd700' : '#39ff14';
+  const fg = ctx.createLinearGradient(mx, my + mh, mx, my);
+  fg.addColorStop(0, mc); fg.addColorStop(1, '#fff');
+  ctx.fillStyle = fg;
+  ctx.fillRect(mx, fy, mw, fh);
+  ctx.strokeStyle = mc;
+  ctx.shadowColor = mc;
+  ctx.shadowBlur = 10;
+  ctx.strokeRect(mx, fy, mw, fh);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 8px "Helvetica Neue", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('PWR', mx + mw / 2, my - 6);
+
+  ctx.restore();
+}
+
+// ============================================================
+// INPUT
+// ============================================================
+function handleTap(e) {
+  e.preventDefault();
+  initAudio();
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+  if (S._gameOver) { restartGame(); return; }
+  if (S.balls.length < 5) {
+    launchBall(S.powerLevel);
+    touchHint.style.display = 'none';
+    S.screenShake = 0.06;
+  }
+  if (Math.random() < 0.3) sfxAmbientBell();
+}
+
+function restartGame() {
+  S.score = 0; S.multiplier = 1; S.ballsRemaining = C.initialBalls;
+  S.feverCount = 0; S.isFever = false; S.feverTimer = 0;
+  S.balls = []; S.particles = [];
+  S.comboCount = 0; S.lastPocketTime = 0;
+  S.screenShake = 0; S._gameOver = false;
+  feverIndicator.classList.remove('active');
+  updateScoreDisplay();
+  feverCountDisplay.textContent = `0/${C.feverThreshold}`;
+  updateBallCounter();
+  touchHint.style.display = 'block';
+  showToast('Ready! Tap to launch ↟');
+}
+
+// ============================================================
+// GAME LOOP
+// ============================================================
+let lastTime = performance.now();
+let ambTimer = 0;
+
+function gameLoop(ts) {
+  let dt = (ts - lastTime) / 1000;
+  lastTime = ts;
+  if (dt > 0.1) dt = 0.1;
+
+  updatePowerMeter(dt);
+  updateBalls(dt);
+  updateParticles(dt);
+
+  if (S.isFever) {
+    S.feverTimer -= dt * 1000;
+    if (S.feverTimer <= 0) {
+      S.isFever = false;
+      S.multiplier = 1;
+      S.screenShake = 0;
+      S.feverCount = 0;
+      feverIndicator.classList.remove('active');
+      feverCountDisplay.textContent = `0/${C.feverThreshold}`;
+      updateScoreDisplay();
+      showToast('Fever ended');
+    }
+  }
+
+  ambTimer += dt;
+  if (ambTimer > 7 + Math.random() * 5) {
+    ambTimer = 0;
+    if (Math.random() < 0.35) sfxAmbientBell();
+  }
+
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  recalcBoard();
+  canvas.addEventListener('click', handleTap);
+  canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    handleTap(e);
+  }, { passive: false });
+  window.addEventListener('resize', recalcBoard);
+  window.addEventListener('orientationchange', () => setTimeout(recalcBoard, 100));
+  updateScoreDisplay();
+  feverCountDisplay.textContent = `0/${C.feverThreshold}`;
+  updateBallCounter();
+  showToast('Tap to launch ↟');
+  requestAnimationFrame(gameLoop);
+}
+
+init();
+</script>
+</body>
+</html>
