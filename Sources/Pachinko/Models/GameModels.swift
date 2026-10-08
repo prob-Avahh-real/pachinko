@@ -21,16 +21,16 @@ enum GameConfig {
     static let pocketLabels = ["OUT", "×1", "×3", "×5", "FEVER", "×5", "×3", "×1", "OUT"]
     static let pocketValues = [0, 100, 300, 500, -1, 500, 300, 100, 0]
 
-    static let pocketColors: [UIColor] = [
-        UIColor(red: 0.2, green: 0, blue: 0, alpha: 1),
-        UIColor(red: 1, green: 0.4, blue: 0, alpha: 1),
-        UIColor(red: 1, green: 0.6, blue: 0, alpha: 1),
-        UIColor(red: 1, green: 0.8, blue: 0, alpha: 1),
-        UIColor(red: 1, green: 0.18, blue: 0.58, alpha: 1),
-        UIColor(red: 1, green: 0.8, blue: 0, alpha: 1),
-        UIColor(red: 1, green: 0.6, blue: 0, alpha: 1),
-        UIColor(red: 1, green: 0.4, blue: 0, alpha: 1),
-        UIColor(red: 0.2, green: 0, blue: 0, alpha: 1),
+    static let pocketColors: [PlatformColor] = [
+        PlatformColor(red: 0.2, green: 0, blue: 0, alpha: 1),
+        PlatformColor(red: 1, green: 0.4, blue: 0, alpha: 1),
+        PlatformColor(red: 1, green: 0.6, blue: 0, alpha: 1),
+        PlatformColor(red: 1, green: 0.8, blue: 0, alpha: 1),
+        PlatformColor(red: 1, green: 0.18, blue: 0.58, alpha: 1),
+        PlatformColor(red: 1, green: 0.8, blue: 0, alpha: 1),
+        PlatformColor(red: 1, green: 0.6, blue: 0, alpha: 1),
+        PlatformColor(red: 1, green: 0.4, blue: 0, alpha: 1),
+        PlatformColor(red: 0.2, green: 0, blue: 0, alpha: 1),
     ]
 }
 
@@ -170,7 +170,7 @@ struct Pocket: Identifiable {
     let height: CGFloat
     let label: String
     let value: Int
-    let color: UIColor
+    let color: PlatformColor
     let isFever: Bool
 }
 
@@ -184,6 +184,6 @@ struct Particle: Identifiable {
     var vy: CGFloat
     var life: CGFloat
     let maxLife: CGFloat
-    let color: UIColor
+    let color: PlatformColor
     var size: CGFloat
 }

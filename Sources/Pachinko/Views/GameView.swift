@@ -84,7 +84,7 @@ final class BoardScene: SKScene {
         self.state = state
         self.physics = PhysicsEngine(state: state)
         super.init(size: size)
-        backgroundColor = UIColor(red: 0.06, green: 0.04, blue: 0.12, alpha: 1) // Deep navy
+        backgroundColor = PlatformColor(red: 0.06, green: 0.04, blue: 0.12, alpha: 1) // Deep navy
         scaleMode = .resizeFill
     }
 
@@ -104,8 +104,8 @@ final class BoardScene: SKScene {
         for pin in state.pins {
             let node = SKShapeNode(circleOfRadius: pin.radius)
             node.position = CGPoint(x: pin.x, y: size.height - pin.y)
-            node.fillColor = UIColor(red: 1, green: 0.84, blue: 0, alpha: 0.9)
-            node.strokeColor = UIColor(red: 1, green: 0.7, blue: 0, alpha: 1)
+            node.fillColor = PlatformColor(red: 1, green: 0.84, blue: 0, alpha: 0.9)
+            node.strokeColor = PlatformColor(red: 1, green: 0.7, blue: 0, alpha: 1)
             node.lineWidth = 0.5
             node.glowWidth = 2
             addChild(node)
@@ -163,7 +163,7 @@ final class BoardScene: SKScene {
         }
     }
 
-    private func spawnParticles(x: CGFloat, y: CGFloat, count: Int, color: UIColor) {
+    private func spawnParticles(x: CGFloat, y: CGFloat, count: Int, color: PlatformColor) {
         for _ in 0..<count {
             let p = SKShapeNode(circleOfRadius: 1.5 + CGFloat.random(in: 0...2.5))
             p.position = CGPoint(x: x, y: size.height - y)
@@ -213,8 +213,8 @@ final class BoardScene: SKScene {
                 node.position = pos
             } else {
                 let node = SKShapeNode(circleOfRadius: ball.radius)
-                node.fillColor = UIColor(red: 0.9, green: 0.9, blue: 0.95, alpha: 1)
-                node.strokeColor = UIColor(red: 1, green: 0.4, blue: 0.4, alpha: 0.8)
+                node.fillColor = PlatformColor(red: 0.9, green: 0.9, blue: 0.95, alpha: 1)
+                node.strokeColor = PlatformColor(red: 1, green: 0.4, blue: 0.4, alpha: 0.8)
                 node.lineWidth = 1.5
                 node.glowWidth = 4
                 node.position = pos

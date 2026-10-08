@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import QuartzCore
 
 /// Physics tick result
 struct PhysicsEvent {
@@ -14,7 +15,7 @@ struct PhysicsEvent {
 final class PhysicsEngine {
     unowned var state: GameState
     var onEvent: ((PhysicsEvent) -> Void)?
-    var onSpawnParticles: ((CGFloat, CGFloat, Int, UIColor) -> Void)?
+    var onSpawnParticles: ((CGFloat, CGFloat, Int, PlatformColor) -> Void)?
 
     init(state: GameState) { self.state = state }
 
@@ -106,7 +107,7 @@ final class PhysicsEngine {
 
                     if ball.hitCount % 3 == 0 {
                         onEvent?(PhysicsEvent(type: .pinHit, x: ball.x, y: ball.y))
-                        onSpawnParticles?(ball.x, ball.y, 2, UIColor(red: 1, green: 0.84, blue: 0, alpha: 1))
+                        onSpawnParticles?(ball.x, ball.y, 2, PlatformColor(red: 1, green: 0.84, blue: 0, alpha: 1))
                     }
                     break // One collision per tick
                 }
@@ -130,7 +131,7 @@ final class PhysicsEngine {
             // Fell off screen
             if ball.y > pocketTop + 80 {
                 state.comboCount = 0
-                onSpawnParticles?(ball.x, ball.y + 10, 5, UIColor(red: 0.4, green: 0, blue: 0, alpha: 1))
+                onSpawnParticles?(ball.x, ball.y + 10, 5, PlatformColor(red: 0.4, green: 0, blue: 0, alpha: 1))
                 onEvent?(PhysicsEvent(type: .drain, x: nil, y: nil))
                 state.balls.remove(at: i)
                 continue
@@ -149,7 +150,7 @@ final class PhysicsEngine {
     private func resolvePocket(_ ball: inout Ball, _ pocket: Pocket) {
         if pocket.isFever {
             state.feverCount += 1
-            onSpawnParticles?(ball.x, ball.y, 22, UIColor(red: 1, green: 0.18, blue: 0.58, alpha: 1))
+            onSpawnParticles?(ball.x, ball.y, 22, PlatformColor(red: 1, green: 0.18, blue: 0.58, alpha: 1))
 
             if state.feverCount >= GameConfig.feverThreshold && !state.isFever {
                 state.isFever = true
@@ -160,14 +161,14 @@ final class PhysicsEngine {
                 state.screenShake = 0.6
                 state.isGameOver = false
                 onSpawnParticles?(state.boardRect.midX, state.boardRect.minY + 100, 40,
-                                  UIColor(red: 1, green: 0.18, blue: 0.58, alpha: 1))
+                                  PlatformColor(red: 1, green: 0.18, blue: 0.58, alpha: 1))
                 onEvent?(PhysicsEvent(type: .feverStart, x: nil, y: nil))
                 return
             }
 
             if state.isFever {
                 state.score += 1000 * state.multiplier
-                onSpawnParticles?(ball.x, ball.y, 20, UIColor(red: 1, green: 0.84, blue: 0, alpha: 1))
+                onSpawnParticles?(ball.x, ball.y, 20, PlatformColor(red: 1, green: 0.84, blue: 0, alpha: 1))
                 onEvent?(PhysicsEvent(type: .score(1000, true, 0), x: ball.x, y: ball.y))
                 return
             }
@@ -198,7 +199,7 @@ final class PhysicsEngine {
 
         // Drain
         state.comboCount = 0
-        onSpawnParticles?(ball.x, ball.y + 10, 5, UIColor(red: 0.4, green: 0, blue: 0, alpha: 1))
+        onSpawnParticles?(ball.x, ball.y + 10, 5, PlatformColor(red: 0.4, green: 0, blue: 0, alpha: 1))
         onEvent?(PhysicsEvent(type: .drain, x: nil, y: nil))
     }
 

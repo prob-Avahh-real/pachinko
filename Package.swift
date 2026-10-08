@@ -4,8 +4,7 @@ import PackageDescription
 let package = Package(
     name: "Pachinko",
     platforms: [
-        .iOS(.v17),
-        .macOS(.v14)
+        .iOS(.v17)
     ],
     products: [
         .library(name: "Pachinko", targets: ["Pachinko"]),
@@ -14,7 +13,8 @@ let package = Package(
     targets: [
         .target(
             name: "Pachinko",
-            path: "Sources/Pachinko"
+            path: "Sources/Pachinko",
+            exclude: ["PachinkoApp.swift"]
         ),
         .testTarget(
             name: "PachinkoTests",
